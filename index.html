@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoVisor SIG - Plataforma Universal QGIS con IA</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+
+    <div id="intro-screen">
+        <div id="intro-space-background"></div>
+        <div id="intro-geo-animation">
+            <canvas id="particle-canvas"></canvas>
+        </div>
+        <div class="intro-content">
+            <h1 class="logo-text">
+                <span class="animated-word">VISOR</span>
+                <span class="animated-word">CARTOGRÁFICO</span>
+            </h1>
+            <div class="accent-line"></div>
+            <p class="subtitle">Ingeniería Ambiental & Gestión del Territorio</p>
+            <button id="btn-continue" class="planet-button">
+                <div class="planet-wrapper">
+                    <div class="planet-sphere"><div class="planet-continents"></div></div>
+                    <div class="planet-ring"></div>
+                </div>
+                <span class="button-text">CONTINUAR</span>
+            </button>
+        </div>
+    </div>
+
+    <main id="main-content" class="hidden">
+        <header class="app-header">
+            <div class="header-logo">
+                <div class="logo-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                <div>
+                    <h2>EcoVisor <span>QGIS & IA</span></h2>
+                    <p>Subida Dinámica y Diagnóstico Computacional de Capas</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="action-btn" id="btn-zoom-provincia" title="Centrar Proyecto"><i class="fa-solid fa-crosshairs"></i> Ajustar Enfoque</button>
+            </div>
+        </header>
+
+        <div class="visor-body">
+            <div id="map"></div>
+
+            <aside class="sidebar">
+                <div class="sidebar-tabs">
+                    <button class="tab-btn active" data-tab="themes-panel"><i class="fa-solid fa-folder-open"></i> Proyectos</button>
+                    <button class="tab-btn" data-tab="legend-panel"><i class="fa-solid fa-robot"></i> Analítica IA</button>
+                </div>
+
+                <div class="tab-content active" id="themes-panel">
+                    <div class="layers-box">
+                        <h3>Carga de Paquete SIG</h3>
+                        <p class="layer-instruction">Sube el archivo <b>.ZIP completo</b> que exportó el plugin de QGIS. El sistema procesará vectores y coberturas ráster de forma automática.</p>
+                        
+                        <div class="file-upload-group">
+                            <label for="input-zip-upload" class="upload-btn">
+                                <i class="fa-solid fa-file-zipper"></i> Cargar Proyecto Completo (.ZIP)
+                            </label>
+                            <input type="file" id="input-zip-upload" accept=".zip" style="display: none;">
+                        </div>
+
+                        <div id="qgis-layers-container">
+                            <h4>Capas Detectadas en el Proyecto</h4>
+                            <div id="themes-list" class="layers-list">
+                                <div class="layer-item empty">
+                                    <i class="fa-solid fa-toggle-off"></i>
+                                    <p>Esperando el paquete de mapas exportado de QGIS...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="legend-panel">
+                    <div class="ai-box" style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(34, 197, 94, 0.15); padding: 15px; border-radius: 12px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+                            <i class="fa-solid fa-brain" style="color: #4ADE80; font-size: 1.1rem;"></i>
+                            <h4 style="color: #f8fafc; font-size: 0.9rem; margin: 0; font-weight: 600;">Diagnóstico Multicapa Dinámico</h4>
+                        </div>
+                        
+                        <div id="ai-report-container" style="color: #cbd5e1; font-size: 0.8rem; line-height: 1.45;">
+                            <p style="color: #64748b; text-align: center; padding: 20px 0;">Activa capas en el menú principal para iniciar la interpretación ambiental cruzada.</p>
+                        </div>
+
+                        <h4 style="color: #f8fafc; font-size: 0.8rem; margin: 15px 0 8px 0; font-weight: 600; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">Simbología Unificada</h4>
+                        <div id="legend-container" style="color: #cbd5e1; font-size: 0.75rem;">
+                            </div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,270 @@
+/* --- VARIABLES DE COLOR GENERALES --- */
+:root {
+    --bg-space: #020617;       /* Fondo oscuro profundo absoluto */
+    --qgis-green: #22C55E;     /* Verde Ambiental */
+    --qgis-glow: #4ADE80;      
+    --academy-gold: #EAB308;   /* Dorado */
+    --clean-white: #F8FAFC;
+}
+
+/* Forzar a toda la página a ser oscura de raíz */
+html, body {
+    background-color: #020617 !important;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+* {
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* ==========================================================================
+   PANTALLA DE ENTRADA (INTRO SPLASH)
+   ========================================================================== */
+#intro-screen {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background-color: #020617 !important; /* Respaldo oscuro total */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    transition: opacity 1.2s ease-in-out, visibility 1.2s;
+}
+
+/* Asegurar que la capa de la imagen ocupe toda la pantalla y no colapse */
+#intro-space-background {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-image: url('assets/tierra-espacio.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter: brightness(75%) contrast(110%);
+    opacity: 0.85;
+    z-index: 0;
+}
+
+#intro-geo-animation {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+}
+
+#particle-canvas {
+    width: 100%; height: 100%;
+    display: block;
+}
+
+/* --- TEXTOS ANIMADOS DE LA INTRO --- */
+.intro-content {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    color: white;
+    pointer-events: none;
+}
+
+.planet-button {
+    pointer-events: auto;
+}
+
+.logo-text {
+    font-size: 3.5rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+.animated-word {
+    display: inline-block;
+    color: var(--clean-white);
+    letter-spacing: 12px;
+    opacity: 0;
+    animation: revealText 1.5s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+    text-shadow: 0 4px 15px rgba(0, 0, 0, 0.9);
+}
+
+.animated-word:nth-child(2) {
+    animation-delay: 0.4s;
+    font-size: 3.3rem;
+}
+
+.accent-line {
+    width: 0px; height: 4px;
+    background-color: var(--academy-gold);
+    margin: 20px auto;
+    border-radius: 2px;
+    animation: growLine 1s 1.2s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+    box-shadow: 0 0 8px var(--academy-gold);
+}
+
+.subtitle {
+    font-size: 1.1rem;
+    letter-spacing: 4px;
+    color: #94A3B8;
+    opacity: 0;
+    margin-bottom: 40px;
+    transform: translateY(10px);
+    animation: fadeInSubtitle 1s 1.5s ease-out forwards;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+}
+
+@keyframes revealText {
+    0% { opacity: 0; letter-spacing: 25px; filter: blur(10px); }
+    100% { opacity: 1; letter-spacing: 8px; filter: blur(0px); }
+}
+
+@keyframes growLine { to { width: 150px; } }
+@keyframes fadeInSubtitle { to { opacity: 1; transform: translateY(0); } }
+
+/* --- BOTÓN INTERACTIVO PLANETA --- */
+.planet-button {
+    background: none; border: none; cursor: pointer;
+    display: inline-flex; flex-direction: column; align-items: center; gap: 15px; outline: none;
+    opacity: 0; transform: scale(0.8);
+    animation: fadeInSubtitle 1s 1.8s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+}
+
+.planet-button:hover { transform: scale(1.05); }
+.planet-wrapper { position: relative; width: 65px; height: 65px; }
+
+.planet-sphere {
+    width: 100%; height: 100%;
+    background: radial-gradient(circle at 30% 30%, #22C55E, #14532D);
+    border-radius: 50%; position: relative; overflow: hidden;
+    box-shadow: 0 0 25px rgba(34, 197, 94, 0.6);
+}
+
+.planet-continents {
+    position: absolute; width: 200%; height: 100%;
+    background: repeating-linear-gradient(90deg, transparent, transparent 12px, rgba(74, 222, 128, 0.35) 12px, rgba(74, 222, 128, 0.35) 32px);
+    animation: spinPlanet 5s linear infinite;
+}
+
+.planet-ring {
+    position: absolute; top: 50%; left: -25%; width: 140%; height: 14px;
+    border: 2px solid var(--academy-gold); border-radius: 50%;
+    transform: translateY(-50%) rotate(-15deg);
+    box-shadow: 0 0 10px var(--academy-gold); pointer-events: none;
+}
+
+.button-text {
+    color: var(--clean-white); font-size: 0.9rem; font-weight: 700; letter-spacing: 4px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+    transition: color 0.3s, text-shadow 0.3s;
+}
+
+.planet-button:hover .button-text { color: var(--qgis-glow); text-shadow: 0 0 10px var(--qgis-glow); }
+@keyframes spinPlanet { 0% { left: 0%; } 100% { left: -100%; } }
+
+.fade-out {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+/* ==========================================================================
+   INTERFAZ REAL DEL VISOR (MISMA ALTURA CON DISPOSICIÓN FIJA)
+   ========================================================================== */
+#main-content {
+    width: 100vw;
+    height: 100vh;
+    background-color: #040814;
+    display: flex;
+    flex-direction: column;
+}
+
+.app-header {
+    background-color: #070d1e;
+    border-bottom: 1px solid rgba(34, 197, 94, 0.15);
+    padding: 10px 25px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 65px;
+}
+
+.header-logo { display: flex; align-items: center; gap: 12px; }
+.logo-icon {
+    background: rgba(34, 197, 94, 0.15); color: var(--qgis-glow);
+    width: 38px; height: 38px; border-radius: 8px;
+    display: flex; justify-content: center; align-items: center;
+    font-size: 1.2rem; border: 1px solid rgba(34, 197, 94, 0.3);
+}
+.header-logo h2 { color: var(--clean-white); font-size: 1.2rem; font-weight: 700; }
+.header-logo h2 span { color: var(--qgis-green); }
+.header-logo p { color: #64748b; font-size: 0.75rem; }
+
+.action-btn {
+    background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #94a3b8; padding: 8px 16px; border-radius: 8px; cursor: pointer;
+    font-size: 0.85rem; font-weight: 600; transition: all 0.25s ease;
+}
+.action-btn:hover { color: white; border-color: var(--qgis-green); background: rgba(34, 197, 94, 0.08); }
+
+.visor-body {
+    flex-grow: 1;
+    display: flex;
+    width: 100%;
+    height: calc(100vh - 65px);
+}
+
+#map {
+    flex-grow: 1;
+    height: 100%;
+}
+
+.sidebar {
+    width: 360px;
+    background: #091124;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sidebar-tabs { display: flex; padding: 10px 15px 0 15px; gap: 8px; background-color: rgba(4, 8, 20, 0.4); }
+.tab-btn { flex: 1; background: none; border: none; color: #475569; padding: 12px; font-size: 0.85rem; font-weight: 700; cursor: pointer; border-radius: 8px 8px 0 0; }
+.tab-btn i { margin-right: 6px; }
+.tab-btn.active { color: var(--qgis-glow); background-color: #091124; border-bottom: 2px solid var(--qgis-green); }
+.tab-content { display: none; padding: 20px; flex-grow: 1; flex-direction: column; overflow-y: auto; }
+.tab-content.active { display: flex; }
+
+.layers-box h3 { color: white; margin-bottom: 5px; font-size: 1rem; font-weight: 600; }
+.layer-instruction { color: #64748b; font-size: 0.8rem; margin-bottom: 20px; line-height: 1.4; }
+
+.file-upload-group { margin-bottom: 25px; }
+.upload-btn {
+    display: flex; justify-content: center; align-items: center; gap: 10px;
+    background-color: var(--qgis-green); color: white;
+    padding: 12px; border-radius: 10px; cursor: pointer;
+    font-size: 0.9rem; font-weight: 700;
+    box-shadow: 0 4px 10px rgba(34, 197, 94, 0.3);
+}
+
+.layers-list { display: flex; flex-direction: column; gap: 12px; }
+.layer-item.empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px;
+    text-align: center; border: 2px dashed rgba(255, 255, 255, 0.08); padding: 30px 20px; border-radius: 12px; color: #475569;
+}
+.layer-item.empty i { font-size: 2.2rem; opacity: 0.5; }
+
+.ai-box h4 { color: var(--clean-white); font-size: 0.95rem; font-weight: 600; }
+.ai-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.ai-avatar { background: linear-gradient(135deg, #10b981, #059669); width: 38px; height: 38px; border-radius: 10px; display: flex; justify-content: center; align-items: center; color: white; }
+.ai-response-container { flex-grow: 1; display: flex; flex-direction: column; gap: 12px; }
+.ai-bubble { background-color: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); color: #cbd5e1; padding: 12px 14px; border-radius: 12px; font-size: 0.85rem; line-height: 1.4; }
+.ai-bubble.text-intro { border-left: 3px solid #64748b; }
+
+.hidden { display: none !important; }
