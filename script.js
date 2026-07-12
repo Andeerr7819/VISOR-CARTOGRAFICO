@@ -6,7 +6,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const ctx = canvas.getContext("2d");
 
     // ==========================================================================
-    // PORTADA ANIMADA DE FLUIDOS
+    // PORTADA ANIMADA DE FLUIDOS (TU ORIGINAL)
     // ==========================================================================
     if (canvas && ctx) {
         let width = canvas.width = window.innerWidth;
@@ -47,7 +47,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ==========================================================================
-    // CONVERTIDOR MATEMÁTICO INTEGRAL: REPARA COORDENADAS UTM
+    // CONVERTIDOR MATEMÁTICO INTEGRAL: REPARA COORDENADAS UTM (TU ORIGINAL)
     // ==========================================================================
     function corregirPuntoUTM(x, y, zona = 17) {
         if (Math.abs(x) < 180 && Math.abs(y) < 180) return [y, x];
@@ -140,6 +140,25 @@ document.addEventListener("DOMContentLoaded", () => {
         const adminUploadZone = document.getElementById("admin-upload-zone");
         const btnToggleAdmin = document.getElementById("btn-toggle-admin");
 
+        // LISTENER AGREGADO PARA OCULTAR / MOSTRAR REPORTE IA
+        const btnToggleAiView = document.getElementById("btn-toggle-ai-view");
+        const aiBodyWrapper = document.getElementById("ai-body-wrapper");
+        const aiToggleIcon = document.getElementById("ai-toggle-icon");
+        let aiCardVisible = true;
+
+        if (btnToggleAiView && aiBodyWrapper) {
+            btnToggleAiView.addEventListener("click", () => {
+                aiCardVisible = !aiCardVisible;
+                if (aiCardVisible) {
+                    aiBodyWrapper.style.display = "block";
+                    aiToggleIcon.className = "fa-solid fa-minus";
+                } else {
+                    aiBodyWrapper.style.display = "none";
+                    aiToggleIcon.className = "fa-solid fa-chevron-down";
+                }
+            });
+        }
+
         if (btnToggleAdmin) {
             btnToggleAdmin.addEventListener("click", () => {
                 adminUploadZone.classList.toggle("hidden");
@@ -150,6 +169,7 @@ document.addEventListener("DOMContentLoaded", () => {
         actualizarCatalogoVisual();
 
         function actualizarCatalogoVisual() {
+            if (!cityStatusContainer) return;
             cityStatusContainer.innerHTML = "";
             const keys = Object.keys(proyectosCargados);
             
@@ -278,7 +298,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // ==========================================================================
-        // ACOPLE CARTOGRÁFICO AJUSTADO POR BOUNDING BOX DINÁMICO REPARADO
+        // ACOPLE CARTOGRÁFICO ORIGINAL CON CONTROL DE SELECCIÓN BAJO DEMANDA
         // ==========================================================================
         function desplegarProyectoEnMapa(key) {
             capasMapaActual.forEach(l => map.removeLayer(l));
@@ -294,12 +314,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
             let boundsCalculados = null;
 
-            // 1. Desplegar vectores y calcular la extensión real de forma dinámica
+            // 1. Desplegar vectores (Tus cálculos originales intocados para evitar desfases)
             vectores.forEach((capa) => {
                 idx++;
                 const hue = (idx * 155) % 360;
                 const layerColor = `hsl(${hue}, 90%, 55%)`;
-                capasEstadoIA[capa.name] = true;
+                
+                // MEJORA SOLICITADA: Solo la división territorial inicia encendida
+                let debeActivarseAlInicio = (capa.name === "DIVISIÓN TERRITORIAL");
+                capasEstadoIA[capa.name] = debeActivarseAlInicio;
 
                 const mapLayer = L.geoJSON(capa.data, {
                     style: function(feature) {
@@ -316,53 +339,55 @@ document.addEventListener("DOMContentLoaded", () => {
                             layer.bindPopup(p + "</div>");
                         }
                     }
-                }).addTo(map);
+                });
 
-                capasMapaActual.push(mapLayer);
+                if (debeActivarseAlInicio) {
+                    mapLayer.addTo(map);
+                }
 
-                // Acumulamos las coordenadas geográficas reales de los límites del Azuay para anclar el ráster
+                capasMapaActual.push({ name: capa.name, layer: mapLayer });
+
                 const layerBounds = mapLayer.getBounds();
                 if (layerBounds.isValid()) {
-                    // Filtrar ceros aislados o puntos corruptos fuera de Ecuador
                     if (layerBounds.getSouth() > -5 && layerBounds.getNorth() < 2 && layerBounds.getWest() > -82 && layerBounds.getEast() < -74) {
                         if (!boundsCalculados) boundsCalculados = layerBounds;
                         else boundsCalculados.extend(layerBounds);
                     }
                 }
 
-                inyectarTarjetaControl(capa.name, layerColor, mapLayer, idx, false);
+                inyectarTarjetaControl(capa.name, layerColor, mapLayer, idx, false, debeActivarseAlInicio);
             });
 
-            // Recuadro de contingencia exacto si el cálculo dinámico falla
             const extensionFinalAmarre = boundsCalculados || L.latLngBounds([-3.38, -79.52], [-2.74, -78.42]);
 
-            // 2. Acoplar Rásters amarrándolos estrictamente al recuadro de los vectores
+            // 2. Acoplar Rásters (Todos inician apagados de forma controlada bajo demanda)
             rasters.forEach((capa) => {
                 idx++;
-                capasEstadoIA[capa.name] = true;
+                capasEstadoIA[capa.name] = false;
 
-                // El secreto matemático: el ráster se estira milimétricamente usando los límites calculados del polígono de cantones
-                const rasterLayer = L.imageOverlay(capa.data, extensionFinalAmarre, { opacity: 0.65 }).addTo(map);
-                capasMapaActual.push(rasterLayer);
+                const rasterLayer = L.imageOverlay(capa.data, extensionFinalAmarre, { opacity: 0.65 });
+                capasMapaActual.push({ name: capa.name, layer: rasterLayer });
 
-                inyectarTarjetaControl(capa.name, "#14b8a6", rasterLayer, idx, true);
+                inyectarTarjetaControl(capa.name, "#14b8a6", rasterLayer, idx, true, false);
             });
 
             if (boundsCalculados) map.fitBounds(boundsCalculados, { padding: [25, 25] });
             else map.setView([-2.90, -78.96], 10);
 
-            procesarAnaliticaIAAutomática();
+            procesarInterpretacionAmbientalIA();
         }
 
-        function inyectarTarjetaControl(nombre, color, layerInstance, id, isRaster) {
+        function inyectarTarjetaControl(nombre, color, layerInstance, id, isRaster, isChecked) {
             const icon = isRaster ? "fa-image" : (nombre.includes("VIAL") || nombre.includes("HIDRO") ? "fa-route" : "fa-draw-polygon");
+            const checkedAttr = isChecked ? "checked" : "";
+
             const cardHtml = `
                 <div class="layer-item qgis-card" id="card-layer-${id}" style="background: rgba(255,255,255,0.02); padding: 11px 14px; border-radius: 8px; margin-bottom: 6px; cursor: pointer; border: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; align-items: center; gap: 10px; max-width: 80%;">
                         <span style="background: ${color}; width: 10px; height: 10px; display: inline-block; border-radius: 50%; box-shadow: 0 0 8px ${color};"></span>
                         <h5 style="color: white; font-size: 0.8rem; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><i class="fa-solid ${icon}" style="opacity:0.4; font-size:0.7rem; margin-right:4px;"></i>${nombre}</h5>
                     </div>
-                    <input type="checkbox" id="chk-layer-${id}" checked style="accent-color: #22C55E; cursor: pointer;">
+                    <input type="checkbox" id="chk-layer-${id}" ${checkedAttr} style="accent-color: #22C55E; cursor: pointer;">
                 </div>
             `;
             themesListContainer.insertAdjacentHTML('beforeend', cardHtml);
@@ -376,70 +401,65 @@ document.addEventListener("DOMContentLoaded", () => {
                     map.removeLayer(layerInstance);
                     capasEstadoIA[nombre] = false;
                 }
-                procesarAnaliticaIAAutomática();
+                procesarInterpretacionAmbientalIA();
             });
 
             document.getElementById(`card-layer-${id}`).addEventListener('click', () => {
                 if (typeof layerInstance.getBounds === 'function' && layerInstance.getBounds().isValid()) {
                     map.fitBounds(layerInstance.getBounds(), { padding: [20, 20] });
-                } else {
-                    map.setView([-2.90, -78.96], 10);
                 }
             });
         }
 
-        function procesarAnaliticaIAAutomática() {
+        // ==========================================================================
+        // NUEVA IA INTERPRETATIVA ACADÉMICA INTERACTIVA AMBIENTAL
+        // ==========================================================================
+        function procesarInterpretacionAmbientalIA() {
             let report = "";
-            let totalActivas = Object.values(capasEstadoIA).filter(v => v === true).length;
+            let activas = Object.keys(capasEstadoIA).filter(k => capasEstadoIA[k]);
 
-            if (totalActivas === 0) {
-                aiRealtimeReport.innerHTML = `<p style="color: #64748b; font-size:0.75rem; margin:0; text-align:center;">Lienzo vacío. Prende mapas para activar la IA.</p>`;
+            if (activas.length === 0) {
+                aiRealtimeReport.innerHTML = `<p style="color: #64748b; font-size:0.75rem; margin:0; text-align:center;">Lienzo vacío. Selecciona un mapa temático para desplegar el análisis geográfico interpretativo.</p>`;
                 return;
             }
 
-            let v = capasEstadoIA;
-            let tieneVias = v["RED VIAL PRINCIPAL"];
-            let tieneAreas = v["ÁREAS PROTEGIDAS"];
-            let tieneTermico = v["RÁSTER - COMPOSTURA TÉRMICA"];
-            let tieneSuelo = v["RÁSTER - USO DE SUELO NATIVO"];
-            let tienePendientes = v["RÁSTER - ANÁLISIS DE PENDIENTES"];
-            let tieneMdt = v["RÁSTER - MODELO DE ELEVACIÓN (MDT)"];
-            let tieneHidro = v["SISTEMA HIDROGRÁFICO"];
-
-            let crucesEncontrados = 0;
-
-            if (tieneVias && tieneAreas) {
-                report += `• <b>Fragmentación de Hábitats:</b> Red vial cruza zonas de reserva biológica. Riesgo alto de pérdida de conectividad vegetal estructural.<br>`;
-                crucesEncontrados++;
+            if (capasEstadoIA["DIVISIÓN TERRITORIAL"]) {
+                report += `• <b>Aprende a interpretar el mapa detallado territorial:</b> El polígono base establece la distribución político-administrativa formal del Azuay, fragmentando el territorio en sus 15 cantones matrices para cruces de variables de gestión local.<br>`;
             }
-            if (tieneTermico && tieneSuelo) {
-                report += `• <b>Anomalías Térmicas:</b> Concentración de calor sobre suelos desnudos/pastizales, contrastando con la regulación climática forestal.<br>`;
-                crucesEncontrados++;
+            if (capasEstadoIA["SISTEMA HIDROGRÁFICO"]) {
+                report += `• <b>Aprende a interpretar el mapa detallado hidrográfico:</b> El trazado lineal expone las venas de escorrentía superficial de la provincia. Muestra cómo los cauces nacen de las partes altas y fluyen canalizados, actuando como fuentes de abastecimiento y zonas vulnerables a descargas hídricas urbanas.<br>`;
             }
-            if (tienePendientes && tieneMdt) {
-                report += `• <b>Dinámica de Laderas:</b> Inclinaciones críticas mapeadas en el MDT marcan zonas de escorrentía súbita y remoción en masa.<br>`;
-                crucesEncontrados++;
+            if (capasEstadoIA["RED VIAL PRINCIPAL"]) {
+                report += `• <b>Aprende a interpretar el mapa detallado vial:</b> La traza vial principal refleja la conectividad terrestre y los ejes de transporte de la región, revelando los frentes donde se concentra la mayor tasa de expansión antrópica sobre suelos nativos.<br>`;
             }
-            if (tieneHidro && tieneVias) {
-                report += `• <b>Presión Antrópica:</b> Proximidad de ejes de drenaje vial a cuerpos de agua incrementa arrastre de precursores contaminantes.<br>`;
-                crucesEncontrados++;
+            if (capasEstadoIA["ÁREAS PROTEGIDAS"]) {
+                report += `• <b>Aprende a interpretar el mapa detallado de conservación:</b> Los polígonos delimitan ecosistemas críticos protegidos. Muestra visualmente las zonas que regulan el equilibrio biológico y que deben permanecer libres de alteración de infraestructuras.<br>`;
             }
-
-            if (totalActivas >= 4) {
-                report += `• <b>Modelamiento de Síntesis:</b> Superposición múltiple simula un escenario de <b>Vulnerabilidad Territorial Media-Alta</b>. Urge planificar corredores verdes ecológicos.`;
-                crucesEncontrados++;
+            if (capasEstadoIA["CENTROS POBLADOS"]) {
+                report += `• <b>Aprende a interpretar el mapa detallado de asentamientos:</b> Los núcleos puntuales concentran los centros consolidados, mapeando con precisión los focos donde la presión demográfica demanda mayor control de recursos naturales.<br>`;
             }
-
-            if (crucesEncontrados === 0) {
-                report = `• <b>Lectura Cartográfica Base:</b> Evaluando variables aisladas. Prende más mapas vectoriales o rásters combinados para iniciar las correlaciones espaciales automáticas.`;
+            if (capasEstadoIA["PARROQUIAS RURALES"]) {
+                report += `• <b>Aprende a interpretar el mapa detallado de parroquias:</b> Mapeo de los límites político-rurales internos que ayuda a evaluar la cobertura de servicios y la gestión ambiental descentralizada.<br>`;
+            }
+            
+            if (capasEstadoIA["RÁSTER - MODELO DE ELEVACIÓN (MDT)"]) {
+                report += `• <b>Aprende a interpretar el mapa detallado de relieve (MDT):</b> La visualización demuestra una topografía altamente accidentada y compleja. Las mayores elevaciones (tonos cafés y marrones oscuros) superan los 4000 m s. n. m. en el núcleo central y en la cordillera occidental (zona del Cajas), actuando como fuentes de recarga hídrica vitales para la región. Por el contrario, las zonas bajas (tonos verdes) marcan la transición directa a la costa.<br>`;
+            }
+            if (capasEstadoIA["RÁSTER - COMPOSTURA TÉRMICA"]) {
+                report += `• <b>Aprende a interpretar el mapa detallado microclimático:</b> El modelado demuestra claras variaciones de temperatura. Identifica zonas térmicas consolidadas sobre las planicies pavimentadas con baja cobertura vegetal, contrastando con la refrigeración climática de los bosques de altura.<br>`;
+            }
+            if (capasEstadoIA["RÁSTER - ANÁLISIS DE PENDIENTES"]) {
+                report += `• <b>Aprende a interpretar el mapa detallado de pendientes:</b> Los gradientes críticos sectorizan las inclinaciones laderizadas severas, exponiendo visualmente los puntos propensos a erosión de suelos, escorrentía rápida y riesgos de remoción en masa.<br>`;
+            }
+            if (capasEstadoIA["RÁSTER - USO DE SUELO NATIVO"]) {
+                report += `• <b>Aprende a interpretar el mapa detallado de coberturas:</b> El mapa de uso de suelo expone la transición de la frontera agropecuaria sobre los remanentes boscosos nativos, permitiendo evaluar la alteración del suelo natural frente a zonas de conservación.<br>`;
             }
 
-            aiRealtimeReport.innerHTML = `<div style="color: #4ade80; font-weight:600; font-size:0.7rem; margin-bottom:4px; text-transform:uppercase;">Modelando ${totalActivas} temas en vivo:</div><div style="font-size:0.75rem; color:#e2e8f0; line-height:1.4;">${report}</div>`;
+            aiRealtimeReport.innerHTML = `
+                <div style="color: #4ade80; font-weight:600; font-size:0.7rem; margin-bottom:5px; text-transform:uppercase; letter-spacing:0.5px;"><i class="fa-solid fa-microchip"></i> Análisis Geográfico Automatizado (${activas.length} Mapas):</div>
+                <div style="font-size:0.75rem; color:#e2e8f0; line-height:1.45; text-transform:none; text-align:justify;">${report}</div>
+            `;
         }
-
-        document.getElementById('btn-zoom-provincia').addEventListener('click', () => {
-            map.setView([-2.90, -78.96], 10);
-        });
 
         const tabButtons = document.querySelectorAll('.tab-btn');
         const tabContents = document.querySelectorAll('.tab-content');
