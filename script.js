@@ -278,7 +278,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // ==========================================================================
-        // ACOPLE GEOGRÁFICO AJUSTADO EN EL AZUAY (ANCLAJE ESTABLE)
+        // ACOPLE CARTOGRÁFICO AJUSTADO POR BOUNDING BOX DINÁMICO REPARADO
         // ==========================================================================
         function desplegarProyectoEnMapa(key) {
             capasMapaActual.forEach(l => map.removeLayer(l));
@@ -292,9 +292,9 @@ document.addEventListener("DOMContentLoaded", () => {
             const vectores = proyecto.capas.filter(c => c.type === "vector");
             const rasters = proyecto.capas.filter(c => c.type === "raster");
 
-            // Matriz de límites estricta de Azuay para evitar desbordes por ceros aislados
-            const recuadroEstableAzuay = L.latLngBounds([-3.42, -79.62], [-2.72, -78.38]);
+            let boundsCalculados = null;
 
+            // 1. Desplegar vectores y calcular la extensión real de forma dinámica
             vectores.forEach((capa) => {
                 idx++;
                 const hue = (idx * 155) % 360;
@@ -319,22 +319,37 @@ document.addEventListener("DOMContentLoaded", () => {
                 }).addTo(map);
 
                 capasMapaActual.push(mapLayer);
+
+                // Acumulamos las coordenadas geográficas reales de los límites del Azuay para anclar el ráster
+                const layerBounds = mapLayer.getBounds();
+                if (layerBounds.isValid()) {
+                    // Filtrar ceros aislados o puntos corruptos fuera de Ecuador
+                    if (layerBounds.getSouth() > -5 && layerBounds.getNorth() < 2 && layerBounds.getWest() > -82 && layerBounds.getEast() < -74) {
+                        if (!boundsCalculados) boundsCalculados = layerBounds;
+                        else boundsCalculados.extend(layerBounds);
+                    }
+                }
+
                 inyectarTarjetaControl(capa.name, layerColor, mapLayer, idx, false);
             });
 
-            // ACOPLE MILIMÉTRICO INMUNE: Forzamos la superposición ráster exactamente en el bloque estable de Azuay
+            // Recuadro de contingencia exacto si el cálculo dinámico falla
+            const extensionFinalAmarre = boundsCalculados || L.latLngBounds([-3.38, -79.52], [-2.74, -78.42]);
+
+            // 2. Acoplar Rásters amarrándolos estrictamente al recuadro de los vectores
             rasters.forEach((capa) => {
                 idx++;
                 capasEstadoIA[capa.name] = true;
 
-                const rasterLayer = L.imageOverlay(capa.data, recuadroEstableAzuay, { opacity: 0.65 }).addTo(map);
+                // El secreto matemático: el ráster se estira milimétricamente usando los límites calculados del polígono de cantones
+                const rasterLayer = L.imageOverlay(capa.data, extensionFinalAmarre, { opacity: 0.65 }).addTo(map);
                 capasMapaActual.push(rasterLayer);
 
                 inyectarTarjetaControl(capa.name, "#14b8a6", rasterLayer, idx, true);
             });
 
-            map.setView([-2.90, -78.96], 10);
-            map.invalidateSize();
+            if (boundsCalculados) map.fitBounds(boundsCalculados, { padding: [25, 25] });
+            else map.setView([-2.90, -78.96], 10);
 
             procesarAnaliticaIAAutomática();
         }
@@ -365,7 +380,11 @@ document.addEventListener("DOMContentLoaded", () => {
             });
 
             document.getElementById(`card-layer-${id}`).addEventListener('click', () => {
-                map.setView([-2.90, -78.96], 10);
+                if (typeof layerInstance.getBounds === 'function' && layerInstance.getBounds().isValid()) {
+                    map.fitBounds(layerInstance.getBounds(), { padding: [20, 20] });
+                } else {
+                    map.setView([-2.90, -78.96], 10);
+                }
             });
         }
 
