@@ -59,15 +59,24 @@
 
         <div class="visor-body">
             <!-- Contenedor del Mapa Mapbox/Leaflet -->
-            <div id="map">
-                <!-- PANEL FLOTANTE DE IA INSTANTÁNEA EN TIEMPO REAL -->
-                <div class="ai-floating-badge">
-                    <div class="ai-badge-header">
-                        <i class="fa-solid fa-wand-magic-sparkles fa-spin-pulse"></i>
-                        <span>Interpretación Ambiental IA Activa</span>
+            <div class="map-wrapper" style="position: relative; flex: 1; height: 100%;">
+                <div id="map" style="width: 100%; height: 100%;"></div>
+                
+                <!-- PANEL FLOTANTE DE IA ADAPTADO CON MINIMIZADOR -->
+                <div class="ai-floating-badge" id="ai-card-container" style="position: absolute; top: 15px; right: 15px; z-index: 1000; background: rgba(15, 23, 42, 0.92); backdrop-filter: blur(10px); border: 1px solid rgba(34, 197, 94, 0.25); padding: 14px; border-radius: 8px; width: 360px; box-shadow: 0 4px 25px rgba(0,0,0,0.6);">
+                    <div class="ai-badge-header" style="display: flex; align-items: center; justify-content: space-between; color: #4ade80; font-weight: 600; font-size: 0.8rem; margin-bottom: 6px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-wand-magic-sparkles fa-spin-pulse"></i>
+                            <span>Interpretación Geográfica IA</span>
+                        </div>
+                        <button id="btn-toggle-ai-view" style="background: transparent; border: 0; color: #64748b; cursor: pointer; font-size: 0.9rem; padding: 0 4px;" title="Minimizar">
+                            <i class="fa-solid fa-minus" id="ai-toggle-icon"></i>
+                        </button>
                     </div>
-                    <div id="ai-realtime-report">
-                        <p style="color: #94a3b8; margin: 0;">Esperando activación de capas temáticas...</p>
+                    <div id="ai-body-wrapper" style="max-height: 260px; overflow-y: auto;">
+                        <div id="ai-realtime-report">
+                            <p style="color: #94a3b8; margin: 0; font-size: 0.75rem;">Esperando activación de capas temáticas...</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -75,7 +84,7 @@
             <!-- Panel Lateral de Control de Cristal -->
             <aside class="sidebar">
                 <div class="sidebar-tabs">
-                    <button class="tab-btn active" data-tab="cities-panel"><i class="fa-solid fa-city"></i> Ciudades</button>
+                    <button class="tab-btn active" data-tab="cities-panel"><i class="fa-solid fa-city"></i> Guía & Descargas</button>
                     <button class="tab-btn" data-tab="themes-panel"><i class="fa-solid fa-layer-group"></i> Capas</button>
                 </div>
 
@@ -83,18 +92,31 @@
                 <div class="tab-content active" id="cities-panel">
                     <div class="layers-box">
                         <h3>Catálogo de Territorios</h3>
-                        <p class="layer-instruction">Selecciona una ciudad de la lista para cargar su base de datos SIG. Las ciudades marcadas en verde contienen cartografía activa.</p>
+                        <p class="layer-instruction">Accede al repositorio oficial en la nube para descargar los paquetes de capas comprimidos (.ZIP) listos para inyectar.</p>
                         
-                        <!-- Lista Dinámica de Monitoreo de Ciudades -->
-                        <div class="city-status-container" id="city-status-list">
-                            <!-- Inyección dinámica desde script.js -->
+                        <!-- BOTÓN OFICIAL DE TU DRIVE CONECTADO -->
+                        <a href="https://drive.google.com/drive/folders/16W1XG33NJDfJKs1C4FTzr2GimxeZwns3?dmr=1" target="_blank" class="drive-download-link" style="display: flex; align-items: center; justify-content: center; gap: 10px; background: rgba(34, 197, 94, 0.15); border: 1px solid #22c55e; color: #4ade80; padding: 11px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.8rem; margin-bottom: 15px; transition: all 0.2s;">
+                            <i class="fa-brands fa-google-drive"></i> Abrir Repositorio Cloud
+                        </a>
+
+                        <!-- MANUAL DE PASOS INCORPORADO -->
+                        <div class="guide-note-box" style="background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.04); padding: 11px; border-radius: 8px; margin-bottom: 15px;">
+                            <h4 style="color: white; font-size: 0.78rem; margin-top: 0; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-list-check" style="color: #22c55e;"></i> Pasos de Operación:</h4>
+                            <ol style="color: #cbd5e1; font-size: 0.72rem; padding-left: 14px; margin: 0; line-height: 1.45;">
+                                <li style="margin-bottom: 4px;">Haz clic en el botón superior de <b>Drive</b> y descarga el archivo comprimido <b>.zip</b> de la provincia.</li>
+                                <li style="margin-bottom: 4px;">Activa el botón <b><span style="color:#22c55e;"><i class="fa-solid fa-lock-open"></i> Modo Admin</span></b> en la esquina superior derecha.</li>
+                                <li style="margin-bottom: 4px;">En la sección inferior, haz clic en <b>Inyectar Proyecto (.ZIP)</b> e introduce tu paquete descargado.</li>
+                                <li>Pasa a la pestaña de <b>Capas</b> y enciende las variables de forma individual para activar la analítica.</li>
+                            </ol>
                         </div>
 
-                        <!-- Panel de carga exclusivo para ti (Oculto inicialmente por seguridad) -->
+                        <div id="city-status-container" id="city-status-list"></div>
+
+                        <!-- Panel de carga exclusivo para ti -->
                         <div id="admin-upload-zone" class="admin-zone hidden" style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 15px;">
                             <h4 style="color: #4ADE80; font-size: 0.8rem; margin-bottom: 8px;"><i class="fa-solid fa-cloud-arrow-up"></i> Consola de Consolidación (.ZIP)</h4>
                             <div class="file-upload-group">
-                                <label for="input-zip-upload" class="upload-btn" style="background: rgba(34, 197, 94, 0.15); border: 1px dashed #22c55e;">
+                                <label for="input-zip-upload" class="upload-btn" style="background: rgba(34, 197, 94, 0.1); border: 1px dashed #22c55e;">
                                     <i class="fa-solid fa-file-zipper"></i> Inyectar Proyecto (.ZIP)
                                 </label>
                                 <input type="file" id="input-zip-upload" accept=".zip" style="display: none;">
@@ -113,7 +135,7 @@
                             <div id="themes-list" class="layers-list">
                                 <div class="layer-item empty">
                                     <i class="fa-solid fa-folder-closed"></i>
-                                    <p>Selecciona primero una ciudad con mapas activos en la pestaña anterior.</p>
+                                    <p>Selecciona primero un proyecto con mapas activos en la pestaña anterior.</p>
                                 </div>
                             </div>
                         </div>
