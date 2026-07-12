@@ -6,7 +6,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const ctx = canvas.getContext("2d");
 
     // ==========================================================================
-    // PORTADA ANIMADA ORIGINAL
+    // PORTADA ANIMADA DE FLUIDOS
     // ==========================================================================
     if (canvas && ctx) {
         let width = canvas.width = window.innerWidth;
@@ -42,42 +42,147 @@ document.addEventListener("DOMContentLoaded", () => {
             introScreen.classList.add("fade-out");
             mainContent.classList.remove("hidden");
             document.body.style.overflow = "auto";
-            setTimeout(() => { initializeDynamicSIG(); }, 150);
+            setTimeout(() => { initializeCoreSIG(); }, 100);
         });
     }
 
     // ==========================================================================
-    // MOTOR DE CONTROL DISCRIMINANTE DE CAPAS QGIS (FILTRO EXCLUSIVO DE TEMAS)
+    // CONVERTIDOR MATEMÁTICO INTEGRAL: REPARA COORDENADAS UTM
     // ==========================================================================
-    function initializeDynamicSIG() {
-        const map = L.map('map', { zoomControl: false }).setView([-2.90, -79.00], 9);
+    function corregirPuntoUTM(x, y, zona = 17) {
+        if (Math.abs(x) < 180 && Math.abs(y) < 180) return [y, x];
+
+        const a = 6378137.0; 
+        const f = 1.0 / 298.257223563;
+        const b = a * (1.0 - f);
+        const e2 = (a*a - b*b) / (a*a);
+        const ePrime2 = (a*a - b*b) / (b*b);
+        
+        const k0 = 0.9996;
+        const falseEasting = 500000.0;
+        const falseNorthing = 10000000.0; 
+        
+        const x_coord = x - falseEasting;
+        const y_coord = y - falseNorthing;
+
+        const M = y_coord / k0;
+        const mu = M / (a * (1.0 - e2/4.0 - 3.0*e2*e2/64.0 - 5.0*Math.pow(e2,3)/256.0));
+        
+        const e1 = (1.0 - Math.sqrt(1.0 - e2)) / (1.0 + Math.sqrt(1.0 - e2));
+        const j1 = (3.0 * e1 / 2.0 - 27.0 * Math.pow(e1, 3.0) / 32.0);
+        const j2 = (21.0 * e1 * e1 / 16.0 - 55.0 * Math.pow(e1, 4.0) / 32.0);
+        const j3 = (151.0 * Math.pow(e1, 3.0) / 96.0);
+        
+        const fp = mu + j1*Math.sin(2.0*mu) + j2*Math.sin(4.0*mu) + j3*Math.sin(6.0*mu);
+        
+        const C1 = ePrime2 * Math.pow(Math.cos(fp), 2.0);
+        const T1 = Math.pow(Math.tan(fp), 2.0);
+        const R1 = a * (1.0 - e2) / Math.pow(1.0 - e2 * Math.pow(Math.sin(fp), 2.0), 1.5);
+        const N1 = a / Math.sqrt(1.0 - e2 * Math.pow(Math.sin(fp), 2.0));
+        const D = x_coord / (N1 * k0);
+
+        let lat = fp - (N1 * Math.tan(fp) / R1) * (D*D/2.0 - (5.0 + 3.0*T1 + 10.0*C1)*Math.pow(D, 4.0)/24.0);
+        let lon = (D - (1.0 + 2.0*T1 + C1)*Math.pow(D, 3.0)/6.0) / Math.cos(fp);
+
+        lat = lat * 180.0 / Math.PI;
+        lon = (lon * 180.0 / Math.PI) + ((zona === 18) ? -75.0 : -81.0);
+
+        return [lat, lon];
+    }
+
+    function normalizarGeometriaGeoJSON(geojson) {
+        if (!geojson || !geojson.features) return geojson;
+        
+        geojson.features.forEach(feature => {
+            if (!feature.geometry || !feature.geometry.coordinates) return;
+            
+            let primeraX = 0;
+            try {
+                let coords = feature.geometry.coordinates;
+                while (Array.isArray(coords[0])) coords = coords[0];
+                primeraX = coords[0];
+            } catch(e){}
+            
+            let zonaEstimada = (primeraX > 750000 || primeraX < 200000) ? 18 : 17;
+
+            const transformarCoordenadas = (coords) => {
+                if (typeof coords[0] === 'number' && typeof coords[1] === 'number') {
+                    const corregido = corregirPuntoUTM(coords[0], coords[1], zonaEstimada);
+                    coords[0] = corregido[1];
+                    coords[1] = corregido[0];
+                } else {
+                    coords.forEach(transformarCoordenadas);
+                }
+            };
+            transformarCoordenadas(feature.geometry.coordinates);
+        });
+        return geojson;
+    }
+
+    // ==========================================================================
+    // MOTOR DE CONTROL PRINCIPAL SIG CORE
+    // ==========================================================================
+    function initializeCoreSIG() {
+        const map = L.map('map', { zoomControl: false }).setView([-2.90, -78.96], 10);
         L.control.zoom({ position: 'topleft' }).addTo(map);
 
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png').addTo(map);
 
-        const fileInput = document.getElementById("input-zip-upload");
+        let proyectosCargados = {};
+        let capasMapaActual = [];
+        let capasEstadoIA = {};
+
+        const cityStatusContainer = document.getElementById("city-status-list");
         const themesListContainer = document.getElementById("themes-list");
-        const legendContainer = document.getElementById("legend-container");
-        const aiReportContainer = document.getElementById("ai-report-container");
+        const aiRealtimeReport = document.getElementById("ai-realtime-report");
+        const fileInput = document.getElementById("input-zip-upload");
+        const adminUploadZone = document.getElementById("admin-upload-zone");
+        const btnToggleAdmin = document.getElementById("btn-toggle-admin");
 
-        let projectBounds = null;
-        let capasRegistradasIA = {};
+        if (btnToggleAdmin) {
+            btnToggleAdmin.addEventListener("click", () => {
+                adminUploadZone.classList.toggle("hidden");
+                btnToggleAdmin.classList.toggle("active-admin");
+            });
+        }
 
-        // LISTA DE CONTROL EXCLUSIVA PARA EL EXAMEN (Cualquier capa que no esté aquí se ignora)
-        const temasPermitidos = [
-            { archivo: "PROVINCIA_DE_LAZUAY_1", nombre: "LÍMITES DE PROVINCIA", color: "#38bdf8" },
-            { archivo: "CANTONESDELAZUAY_4", nombre: "DIVISIÓN CANTONAL", color: "#a855f7" },
-            { archivo: "PARROQUIASDELAZUAY_15", nombre: "PARROQUIAS RURALES", color: "#ec4899" },
-            { archivo: "CENTROSPOBLADOSAZUAY_20", nombre: "CENTROS POBLADOS", color: "#eab308" },
-            { archivo: "REDVIALAZUAY_16", nombre: "RED VIAL PRINCIPAL", color: "#f97316" },
-            { archivo: "AREASPROTEGIDASDELAZUAY_17", nombre: "ÁREAS PROTEGIDAS", color: "#10b981" },
-            { archivo: "RIOS1DELAZUAY_10", nombre: "SISTEMA HIDROGRÁFICO", color: "#06b6d4" },
-            { archivo: "TEMPERATURAAZUAY_18", nombre: "RÁSTER - MAPA TÉRMICO", color: "#ef4444", esRaster: true },
-            { archivo: "COBERTURAYUSODESUELOAZUAY_9", nombre: "RÁSTER - USO DE SUELO", color: "#22c55e", esRaster: true },
-            { archivo: "MAPAPENDIENTEDELAZUAY_3", nombre: "RÁSTER - MAPA DE PENDIENTES", color: "#6366f1", esRaster: true },
-            { archivo: "MDTDELAPROVINCIADELAZUAY_8", nombre: "RÁSTER - MODELO ELEVACIÓN (MDT)", color: "#14b8a6", esRaster: true }
-        ];
+        actualizarCatalogoVisual();
+
+        function actualizarCatalogoVisual() {
+            cityStatusContainer.innerHTML = "";
+            const keys = Object.keys(proyectosCargados);
+            
+            if (keys.length === 0) {
+                cityStatusContainer.innerHTML = `
+                    <div style="color: #64748b; font-size: 0.75rem; text-align: center; padding: 15px; border: 1px dashed rgba(255,255,255,0.05); border-radius: 6px;">
+                        <i class="fa-solid fa-folder-open" style="margin-bottom: 4px; display:block; opacity:0.5;"></i> Servidor listo. Inyecta el .ZIP desde el Modo Admin.
+                    </div>
+                `;
+                return;
+            }
+
+            keys.forEach(key => {
+                const proj = proyectosCargados[key];
+                const cardHtml = `
+                    <div class="city-status-card" style="background: rgba(34, 197, 94, 0.03); border-color: rgba(34, 197, 94, 0.15); padding: 12px; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid;">
+                        <div>
+                            <h4 style="color: white; font-size: 0.85rem; margin: 0; font-weight:600;">${proj.nombre}</h4>
+                            <span style="color: #22c55e; font-size: 0.7rem; display: flex; align-items: center; gap: 4px; margin-top: 3px;">
+                                <span style="background: #22c55e; width: 6px; height: 6px; display: inline-block; border-radius: 50%;"></span>
+                                Cartografía Activa
+                            </span>
+                        </div>
+                        <button class="select-city" data-key="${key}" style="background: #22c55e; color: white; border: 0; padding: 4px 10px; border-radius: 4px; font-size: 0.7rem; cursor: pointer; font-weight:600;"><i class="fa-solid fa-eye"></i> Ver</button>
+                    </div>
+                `;
+                cityStatusContainer.insertAdjacentHTML('beforeend', cardHtml);
+            });
+
+            document.querySelectorAll(".select-city").forEach(btn => {
+                btn.addEventListener("click", () => { desplegarProyectoEnMapa(btn.dataset.key); });
+            });
+        }
 
         if (fileInput) {
             fileInput.addEventListener("change", function(e) {
@@ -85,198 +190,236 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (!file) return;
 
                 themesListContainer.innerHTML = `
-                    <div style="color: #94a3b8; font-size: 0.85rem; text-align: center; padding: 20px;">
-                        <i class="fa-solid fa-filter fa-spin" style="color: #22C55E; font-size: 1.5rem; margin-bottom: 10px;"></i>
-                        <p>Filtrando temas oficiales y acoplando coberturas ráster...</p>
+                    <div style="color: #94a3b8; font-size: 0.85rem; text-align: center; padding: 25px;">
+                        <i class="fa-solid fa-compress fa-spin" style="color: #22C55E; font-size: 1.6rem; margin-bottom: 12px;"></i>
+                        <p style="margin:0; font-weight:500;">Procesando y alineando capas espaciales...</p>
                     </div>
                 `;
 
                 const reader = new FileReader();
                 reader.onload = function(event) {
                     JSZip.loadAsync(event.target.result).then(async function(zip) {
-                        themesListContainer.innerHTML = "";
-                        legendContainer.innerHTML = "";
-                        aiReportContainer.innerHTML = "";
-                        projectBounds = null;
-                        capasRegistradasIA = {};
-                        let layerIdx = 0;
+                        let mapaVectoresAgrupados = {};
+                        let capasFinalesUnificadas = [];
+                        let nombreTerritorio = "PROYECTO TERRITORIAL - AZUAY";
 
-                        // Recorrer los archivos contenidos en el .zip
                         for (let path in zip.files) {
                             const entry = zip.files[path];
-                            const rawFileName = path.split('/').pop().split('.').shift();
+                            if (entry.dir) continue;
 
-                            // VALIDACIÓN DE FILTRO CRÍTICA: Buscar si el archivo calza exactamente con la lista de temas permitidos
-                            const configuracionTema = temasPermitidos.find(t => t.archivo === rawFileName);
+                            const filename = path.split('/').pop();
                             
-                            // Si el archivo no es un tema oficial del examen, lo saltamos de inmediato
-                            if (!configuracionTema) continue;
-
-                            // 1. PROCESADO VECTORIAL DE ARCHIVOS JS PERMITIDOS
-                            if (!entry.dir && path.endsWith('.js') && !configuracionTema.esRaster) {
-                                const rawText = await entry.async("string");
-                                const jsonContent = rawText.replace(/^var\s+json_\w+\s*=\s*/, '').replace(/;\s*$/, '');
+                            if (filename.endsWith('.js')) {
+                                const text = await entry.async("string");
+                                const cleanJson = text.replace(/^var\s+json_\w+\s*=\s*/, '').replace(/;\s*$/, '');
                                 
                                 try {
-                                    const geojsonData = JSON.parse(jsonContent);
-                                    layerIdx++;
+                                    let geojson = JSON.parse(cleanJson);
+                                    geojson = normalizarGeometriaGeoJSON(geojson);
 
-                                    const mapLayer = L.geoJSON(geojsonData, {
-                                        style: function(feature) {
-                                            const type = feature.geometry ? feature.geometry.type : "";
-                                            // Quitamos el relleno a la hidrografía y vías filtradas
-                                            if (type.includes("LineString") || configuracionTema.nombre.includes("HIDRO") || configuracionTema.nombre.includes("VIAL")) {
-                                                return { color: configuracionTema.color, weight: 1.8, opacity: 0.85, fill: false, fillColor: 'none' };
-                                            }
-                                            return { fillColor: configuracionTema.color, color: configuracionTema.color, weight: 1, fillOpacity: 0.22 };
-                                        },
-                                        onEachFeature: function(feature, layer) {
-                                            if (feature.properties) {
-                                                let p = `<div style="color:#cbd5e1; font-size:0.8rem; max-height:150px; overflow-y:auto;">`;
-                                                for(let k in feature.properties) { p += `<b>${k}:</b> ${feature.properties[k]}<br>`; }
-                                                layer.bindPopup(p + "</div>");
-                                            }
-                                        }
-                                    }).addTo(map);
+                                    let temaDestino = "DIVISIÓN TERRITORIAL";
+                                    let rawUpper = filename.toUpperCase();
 
-                                    // Usamos los cantones para fijar la extensión base exacta del Azuay
-                                    if (configuracionTema.archivo.includes("CANTONES") || !projectBounds) {
-                                        projectBounds = mapLayer.getBounds();
+                                    if (rawUpper.includes("RIOS") || rawUpper.includes("HIDRO") || rawUpper.includes("DRENAJE")) temaDestino = "SISTEMA HIDROGRÁFICO";
+                                    else if (rawUpper.includes("VIAL") || rawUpper.includes("VIAS") || rawUpper.includes("RED")) temaDestino = "RED VIAL PRINCIPAL";
+                                    else if (rawUpper.includes("AREAS") || rawUpper.includes("PROTEGIDAS") || rawUpper.includes("BOSQUE")) temaDestino = "ÁREAS PROTEGIDAS";
+                                    else if (rawUpper.includes("PARROQ")) temaDestino = "PARROQUIAS RURALES";
+                                    else if (rawUpper.includes("POBLADOS") || rawUpper.includes("CENTROS")) temaDestino = "CENTROS POBLADOS";
+
+                                    if (!mapaVectoresAgrupados[temaDestino]) {
+                                        mapaVectoresAgrupados[temaDestino] = geojson;
                                     } else {
-                                        projectBounds.extend(mapLayer.getBounds());
+                                        mapaVectoresAgrupados[temaDestino].features = mapaVectoresAgrupados[temaDestino].features.concat(geojson.features);
                                     }
-
-                                    capasRegistradasIA[configuracionTema.nombre] = true;
-                                    inyectarElementoPanel(configuracionTema.nombre, configuracionTema.color, mapLayer, layerIdx, map, false);
-
-                                } catch(err) {
-                                    console.error(err);
-                                }
+                                } catch(err) { console.log("Filtro vector."); }
                             }
 
-                            // 2. PROCESADO RÁSTER DE IMÁGENES PERMITIDAS (.PNG / .JPG)
-                            if (!entry.dir && (path.endsWith('.png') || path.endsWith('.jpg')) && configuracionTema.esRaster) {
+                            if (filename.endsWith('.png') || filename.endsWith('.jpg')) {
+                                if (filename.includes("tierra-espacio") || filename.includes("silueta-mundo")) continue;
+
                                 const blob = await entry.async("blob");
-                                const imgUrl = URL.createObjectURL(blob);
-                                layerIdx++;
-                                capasRegistradasIA[configuracionTema.nombre] = true;
+                                const base64 = await new Promise(res => {
+                                    const r = new FileReader(); r.onloadend = () => res(r.result); r.readAsDataURL(blob);
+                                });
 
-                                // Superponer la cobertura ráster sobre el encuadre exacto calculado de los cantones
-                                setTimeout(() => {
-                                    const extensionAzuayFija = projectBounds || L.latLngBounds([-3.45, -79.95], [-2.45, -78.35]);
-                                    const rasterLayer = L.imageOverlay(imgUrl, extensionAzuayFija, { opacity: 0.65 }).addTo(map);
-                                    inyectarElementoPanel(configuracionTema.nombre, configuracionTema.color, rasterLayer, layerIdx, map, true);
-                                }, 400);
+                                let rawUpper = filename.toUpperCase();
+                                let temaNombreFormal = `RÁSTER - ANÁLISIS DE COBERTURAS`;
+                                
+                                if (rawUpper.includes("COBERTURA") || rawUpper.includes("SUELO")) temaNombreFormal = "RÁSTER - USO DE SUELO NATIVO";
+                                else if (rawUpper.includes("TEMPERATURA") || rawUpper.includes("TERMICO")) temaNombreFormal = "RÁSTER - COMPOSTURA TÉRMICA";
+                                else if (rawUpper.includes("PENDIENTE")) temaNombreFormal = "RÁSTER - ANÁLISIS DE PENDIENTES";
+                                else if (rawUpper.includes("MDT") || rawUpper.includes("ELEVACION")) temaNombreFormal = "RÁSTER - MODELO DE ELEVACIÓN (MDT)";
+
+                                capasFinalesUnificadas.push({ type: "raster", name: temaNombreFormal, data: base64 });
                             }
                         }
 
-                        // CLAVAR ENFOQUE DIRECTO EN AZUAY
-                        if (projectBounds) {
-                            map.invalidateSize();
-                            map.fitBounds(projectBounds, { padding: [35, 35] });
-                            actualizarInterpretacionIA();
+                        for (let nombreTema in mapaVectoresAgrupados) {
+                            capasFinalesUnificadas.push({
+                                type: "vector",
+                                name: nombreTema,
+                                data: mapaVectoresAgrupados[nombreTema]
+                            });
                         }
 
-                    }).catch(err => {
-                        console.error(err);
-                        themesListContainer.innerHTML = `<p style="color:#ef4444; font-size:0.8rem; text-align:center;">Error procesando el zip.</p>`;
-                    });
+                        const proyectoKey = "proj_" + Date.now();
+                        proyectosCargados[proyectoKey] = {
+                            nombre: nombreTerritorio,
+                            capas: capasFinalesUnificadas
+                        };
+
+                        actualizarCatalogoVisual();
+                        desplegarProyectoEnMapa(proyectoKey);
+
+                    }).catch(err => { console.error(err); });
                 };
                 reader.readAsArrayBuffer(file);
             });
         }
 
         // ==========================================================================
-        // MOTOR DE ANÁLISIS E INTERPRETACIÓN AMBIENTAL DE LA IA
+        // ACOPLE GEOGRÁFICO AJUSTADO EN EL AZUAY (ANCLAJE ESTABLE)
         // ==========================================================================
-        function actualizarInterpretacionIA() {
-            let reportHtml = "";
-            let conteoActivas = 0;
+        function desplegarProyectoEnMapa(key) {
+            capasMapaActual.forEach(l => map.removeLayer(l));
+            capasMapaActual = [];
+            capasEstadoIA = {};
+            themesListContainer.innerHTML = "";
 
-            for (let nombre in capasRegistradasIA) {
-                if (capasRegistradasIA[nombre]) conteoActivas++;
-            }
+            const proyecto = proyectosCargados[key];
+            let idx = 0;
 
-            if (conteoActivas === 0) {
-                aiReportContainer.innerHTML = `<p style="color: #64748b; text-align: center;">Prende capas en el menú para iniciar el análisis.</p>`;
-                return;
-            }
+            const vectores = proyecto.capas.filter(c => c.type === "vector");
+            const rasters = proyecto.capas.filter(c => c.type === "raster");
 
-            reportHtml += `<p style="margin-bottom: 8px;"><span style="background: rgba(34, 197, 94, 0.15); color: #4ADE80; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight:600;">ANÁLISIS DE ${conteoActivas} TEMAS ACTIVOS</span></p>`;
-            reportHtml += `<div style="background: rgba(255,255,255,0.01); border-left: 3px solid #22c55e; padding: 8px 10px; border-radius: 4px; font-size: 0.8rem; color: #cbd5e1;">`;
+            // Matriz de límites estricta de Azuay para evitar desbordes por ceros aislados
+            const recuadroEstableAzuay = L.latLngBounds([-3.42, -79.62], [-2.72, -78.38]);
 
-            let cruces = false;
-            let tieneVias = capasRegistradasIA["RED VIAL PRINCIPAL"];
-            let tieneAreas = capasRegistradasIA["ÁREAS PROTEGIDAS"];
-            let tieneTermico = capasRegistradasIA["RÁSTER - MAPA TÉRMICO"];
-            let tieneSuelo = capasRegistradasIA["RÁSTER - USO DE SUELO"];
-            let tienePendientes = capasRegistradasIA["RÁSTER - MAPA DE PENDIENTES"];
-            let tieneMdt = capasRegistradasIA["RÁSTER - MODELO ELEVACIÓN (MDT)"];
+            vectores.forEach((capa) => {
+                idx++;
+                const hue = (idx * 155) % 360;
+                const layerColor = `hsl(${hue}, 90%, 55%)`;
+                capasEstadoIA[capa.name] = true;
 
-            if (tieneVias && tieneAreas) {
-                reportHtml += `⚠️ <b>FRAGMENTACIÓN ECO-ESTRUCTURAL:</b> La infraestructura vial activa intersecta zonas de conservación biológica. Peligro elevado de pérdida de conectividad vegetal y aislamiento de ecosistemas frágiles.<br><br>`;
-                cruces = true;
-            }
-            if (tieneTermico && tieneSuelo) {
-                reportHtml += `🔥 <b>CORRELACIÓN MICROMETEOROLÓGICA:</b> El cruce térmico sobre el uso de suelo simula con claridad islas de calor sobre suelo desnudo y pastizales expuestos, confirmando la función reguladora de la cobertura boscosa nativa.<br><br>`;
-                cruces = true;
-            }
-            if (tienePendientes && tieneMdt) {
-                reportHtml += `🏔️ <b>DINÁMICA DE LADERAS Y GEOMORFOLOGÍA:</b> El análisis de inclinación de vertientes sobre el MDT delimita zonas de alta montaña críticas, propensas a fuertes tasas de escorrentía superficial y procesos de remoción en masa.<br><br>`;
-                cruces = true;
-            }
-            if (conteoActivas >= 5) {
-                reportHtml += `📊 <b>SÍNTESIS INTEGRAL DEL TERRITORIAL:</b> La integración combinada de variables vectoriales e imágenes espaciales define un escenario transitorio de <b>Vulnerabilidad Territorial Media-Alta</b>. Se recomienda adecuar los planes de mitigación locales (PDOT) enfocados en laderas críticas.`;
-                cruces = true;
-            }
-            if (!cruces) {
-                reportHtml += `🔎 <b>ANÁLISIS TEMÁTICO INDEPENDIENTE:</b> Evaluando mapas de manera aislada. Activa múltiples capas vectoriales o rásters combinados para que la IA inicie el modelamiento de impactos cruzados en tiempo real.`;
-            }
+                const mapLayer = L.geoJSON(capa.data, {
+                    style: function(feature) {
+                        const type = feature.geometry ? feature.geometry.type : "";
+                        if (type.includes("LineString") || capa.name.includes("HIDRO") || capa.name.includes("VIAL")) {
+                            return { color: layerColor, weight: 1.6, opacity: 0.9, fill: false, fillColor: 'none' };
+                        }
+                        return { fillColor: layerColor, color: layerColor, weight: 1, fillOpacity: 0.20 };
+                    },
+                    onEachFeature: function(feature, layer) {
+                        if (feature.properties) {
+                            let p = `<div style="color:#cbd5e1; font-size:0.75rem; max-height:120px; overflow-y:auto;">`;
+                            for(let k in feature.properties) { p += `<b>${k}:</b> ${feature.properties[k]}<br>`; }
+                            layer.bindPopup(p + "</div>");
+                        }
+                    }
+                }).addTo(map);
 
-            reportHtml += `</div>`;
-            aiReportContainer.innerHTML = reportHtml;
+                capasMapaActual.push(mapLayer);
+                inyectarTarjetaControl(capa.name, layerColor, mapLayer, idx, false);
+            });
+
+            // ACOPLE MILIMÉTRICO INMUNE: Forzamos la superposición ráster exactamente en el bloque estable de Azuay
+            rasters.forEach((capa) => {
+                idx++;
+                capasEstadoIA[capa.name] = true;
+
+                const rasterLayer = L.imageOverlay(capa.data, recuadroEstableAzuay, { opacity: 0.65 }).addTo(map);
+                capasMapaActual.push(rasterLayer);
+
+                inyectarTarjetaControl(capa.name, "#14b8a6", rasterLayer, idx, true);
+            });
+
+            map.setView([-2.90, -78.96], 10);
+            map.invalidateSize();
+
+            procesarAnaliticaIAAutomática();
         }
 
-        function inyectarElementoPanel(nombre, color, layerInstance, id, mapInstance, isRaster) {
-            const typeIcon = isRaster ? "fa-image" : (nombre.includes("VIAL") || nombre.includes("HIDRO") ? "fa-route" : "fa-draw-polygon");
+        function inyectarTarjetaControl(nombre, color, layerInstance, id, isRaster) {
+            const icon = isRaster ? "fa-image" : (nombre.includes("VIAL") || nombre.includes("HIDRO") ? "fa-route" : "fa-draw-polygon");
             const cardHtml = `
-                <div class="layer-item qgis-card" id="qgis-card-${id}" style="background: rgba(255,255,255,0.02); padding: 12px; border-radius: 8px; margin-bottom: 6px; cursor: pointer; border: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
+                <div class="layer-item qgis-card" id="card-layer-${id}" style="background: rgba(255,255,255,0.02); padding: 11px 14px; border-radius: 8px; margin-bottom: 6px; cursor: pointer; border: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; align-items: center; gap: 10px; max-width: 80%;">
                         <span style="background: ${color}; width: 10px; height: 10px; display: inline-block; border-radius: 50%; box-shadow: 0 0 8px ${color};"></span>
-                        <h5 style="color: white; font-size: 0.8rem; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><i class="fa-solid ${typeIcon}" style="font-size:0.7rem; opacity:0.4; margin-right:4px;"></i>${nombre}</h5>
+                        <h5 style="color: white; font-size: 0.8rem; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><i class="fa-solid ${icon}" style="opacity:0.4; font-size:0.7rem; margin-right:4px;"></i>${nombre}</h5>
                     </div>
-                    <input type="checkbox" id="check-layer-${id}" checked style="accent-color: #22C55E; cursor: pointer;">
+                    <input type="checkbox" id="chk-layer-${id}" checked style="accent-color: #22C55E; cursor: pointer;">
                 </div>
             `;
             themesListContainer.insertAdjacentHTML('beforeend', cardHtml);
 
-            document.getElementById(`check-layer-${id}`).addEventListener('change', (e) => {
+            document.getElementById(`chk-layer-${id}`).addEventListener('change', (e) => {
                 e.stopPropagation();
                 if (e.target.checked) {
-                    mapInstance.addLayer(layerInstance);
-                    capasRegistradasIA[nombre] = true;
+                    map.addLayer(layerInstance);
+                    capasEstadoIA[nombre] = true;
                 } else {
-                    mapInstance.removeLayer(layerInstance);
-                    capasRegistradasIA[nombre] = false;
+                    map.removeLayer(layerInstance);
+                    capasEstadoIA[nombre] = false;
                 }
-                actualizarInterpretacionIA();
+                procesarAnaliticaIAAutomática();
             });
 
-            document.getElementById(`qgis-card-${id}`).addEventListener('click', () => {
-                if (typeof layerInstance.getBounds === 'function') mapInstance.fitBounds(layerInstance.getBounds(), { padding: [20, 20] });
-                else if (projectBounds) mapInstance.fitBounds(projectBounds, { padding: [20, 20] });
+            document.getElementById(`card-layer-${id}`).addEventListener('click', () => {
+                map.setView([-2.90, -78.96], 10);
             });
+        }
 
-            legendContainer.insertAdjacentHTML('beforeend', `
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-                    <span style="background:${color}; width:12px; height:12px; display:inline-block; border-radius:2px;"></span>
-                    <span>${nombre}</span>
-                </div>
-            `);
+        function procesarAnaliticaIAAutomática() {
+            let report = "";
+            let totalActivas = Object.values(capasEstadoIA).filter(v => v === true).length;
+
+            if (totalActivas === 0) {
+                aiRealtimeReport.innerHTML = `<p style="color: #64748b; font-size:0.75rem; margin:0; text-align:center;">Lienzo vacío. Prende mapas para activar la IA.</p>`;
+                return;
+            }
+
+            let v = capasEstadoIA;
+            let tieneVias = v["RED VIAL PRINCIPAL"];
+            let tieneAreas = v["ÁREAS PROTEGIDAS"];
+            let tieneTermico = v["RÁSTER - COMPOSTURA TÉRMICA"];
+            let tieneSuelo = v["RÁSTER - USO DE SUELO NATIVO"];
+            let tienePendientes = v["RÁSTER - ANÁLISIS DE PENDIENTES"];
+            let tieneMdt = v["RÁSTER - MODELO DE ELEVACIÓN (MDT)"];
+            let tieneHidro = v["SISTEMA HIDROGRÁFICO"];
+
+            let crucesEncontrados = 0;
+
+            if (tieneVias && tieneAreas) {
+                report += `• <b>Fragmentación de Hábitats:</b> Red vial cruza zonas de reserva biológica. Riesgo alto de pérdida de conectividad vegetal estructural.<br>`;
+                crucesEncontrados++;
+            }
+            if (tieneTermico && tieneSuelo) {
+                report += `• <b>Anomalías Térmicas:</b> Concentración de calor sobre suelos desnudos/pastizales, contrastando con la regulación climática forestal.<br>`;
+                crucesEncontrados++;
+            }
+            if (tienePendientes && tieneMdt) {
+                report += `• <b>Dinámica de Laderas:</b> Inclinaciones críticas mapeadas en el MDT marcan zonas de escorrentía súbita y remoción en masa.<br>`;
+                crucesEncontrados++;
+            }
+            if (tieneHidro && tieneVias) {
+                report += `• <b>Presión Antrópica:</b> Proximidad de ejes de drenaje vial a cuerpos de agua incrementa arrastre de precursores contaminantes.<br>`;
+                crucesEncontrados++;
+            }
+
+            if (totalActivas >= 4) {
+                report += `• <b>Modelamiento de Síntesis:</b> Superposición múltiple simula un escenario de <b>Vulnerabilidad Territorial Media-Alta</b>. Urge planificar corredores verdes ecológicos.`;
+                crucesEncontrados++;
+            }
+
+            if (crucesEncontrados === 0) {
+                report = `• <b>Lectura Cartográfica Base:</b> Evaluando variables aisladas. Prende más mapas vectoriales o rásters combinados para iniciar las correlaciones espaciales automáticas.`;
+            }
+
+            aiRealtimeReport.innerHTML = `<div style="color: #4ade80; font-weight:600; font-size:0.7rem; margin-bottom:4px; text-transform:uppercase;">Modelando ${totalActivas} temas en vivo:</div><div style="font-size:0.75rem; color:#e2e8f0; line-height:1.4;">${report}</div>`;
         }
 
         document.getElementById('btn-zoom-provincia').addEventListener('click', () => {
-            if (projectBounds) map.fitBounds(projectBounds, { padding: [30, 30] });
+            map.setView([-2.90, -78.96], 10);
         });
 
         const tabButtons = document.querySelectorAll('.tab-btn');
