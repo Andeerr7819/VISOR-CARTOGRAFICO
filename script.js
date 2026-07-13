@@ -120,8 +120,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ==========================================================================
-    // MOTOR DE CONTROL PRINCIPAL SIG CORE
+    // MOTOR DE CONTROL PRINCIPAL SIG CORE (SOPORTE HISTORIAL MULTI-PROVINCIA)
     // ==========================================================================
+    let proyectosCargadosGlobal = {}; // Memoria global irrompible para almacenar múltiples carpetas virtuales
+
     function initializeCoreSIG() {
         const map = L.map('map', { zoomControl: false }).setView([-2.90, -78.96], 10);
         L.control.zoom({ position: 'topleft' }).addTo(map);
@@ -129,7 +131,6 @@ document.addEventListener("DOMContentLoaded", () => {
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png').addTo(map);
 
-        let proyectosCargados = {};
         let capasMapaActual = [];
         let capasEstadoIA = {};
 
@@ -140,7 +141,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const adminUploadZone = document.getElementById("admin-upload-zone");
         const btnToggleAdmin = document.getElementById("btn-toggle-admin");
 
-        // LISTENER AGREGADO PARA OCULTAR / MOSTRAR REPORTE IA
+        // FUNCIÓN MINI-CONTROL REPORTE IA
         const btnToggleAiView = document.getElementById("btn-toggle-ai-view");
         const aiBodyWrapper = document.getElementById("ai-body-wrapper");
         const aiToggleIcon = document.getElementById("ai-toggle-icon");
@@ -171,7 +172,7 @@ document.addEventListener("DOMContentLoaded", () => {
         function actualizarCatalogoVisual() {
             if (!cityStatusContainer) return;
             cityStatusContainer.innerHTML = "";
-            const keys = Object.keys(proyectosCargados);
+            const keys = Object.keys(proyectosCargadosGlobal);
             
             if (keys.length === 0) {
                 cityStatusContainer.innerHTML = `
@@ -183,17 +184,17 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             keys.forEach(key => {
-                const proj = proyectosCargados[key];
+                const proj = proyectosCargadosGlobal[key];
                 const cardHtml = `
                     <div class="city-status-card" style="background: rgba(34, 197, 94, 0.03); border-color: rgba(34, 197, 94, 0.15); padding: 12px; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid;">
                         <div>
-                            <h4 style="color: white; font-size: 0.85rem; margin: 0; font-weight:600;">${proj.nombre}</h4>
+                            <h4 style="color: white; font-size: 0.85rem; margin: 0; font-weight:600;"><i class="fa-solid fa-folder-open" style="color:#22c55e; margin-right:6px;"></i>${proj.nombre}</h4>
                             <span style="color: #22c55e; font-size: 0.7rem; display: flex; align-items: center; gap: 4px; margin-top: 3px;">
                                 <span style="background: #22c55e; width: 6px; height: 6px; display: inline-block; border-radius: 50%;"></span>
-                                Cartografía Activa
+                                Repositorio Guardado (${proj.capas.length} Capas)
                             </span>
                         </div>
-                        <button class="select-city" data-key="${key}" style="background: #22c55e; color: white; border: 0; padding: 4px 10px; border-radius: 4px; font-size: 0.7rem; cursor: pointer; font-weight:600;"><i class="fa-solid fa-eye"></i> Ver</button>
+                        <button class="select-city" data-key="${key}" style="background: #22c55e; color: white; border: 0; padding: 6px 12px; border-radius: 4px; font-size: 0.7rem; cursor: pointer; font-weight:600;"><i class="fa-solid fa-eye"></i> Ver</button>
                     </div>
                 `;
                 cityStatusContainer.insertAdjacentHTML('beforeend', cardHtml);
@@ -212,7 +213,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 themesListContainer.innerHTML = `
                     <div style="color: #94a3b8; font-size: 0.85rem; text-align: center; padding: 25px;">
                         <i class="fa-solid fa-compress fa-spin" style="color: #22C55E; font-size: 1.6rem; margin-bottom: 12px;"></i>
-                        <p style="margin:0; font-weight:500;">Procesando y alineando capas espaciales...</p>
+                        <p style="margin:0; font-weight:500;">Generando carpeta virtual de provincia...</p>
                     </div>
                 `;
 
@@ -221,7 +222,13 @@ document.addEventListener("DOMContentLoaded", () => {
                     JSZip.loadAsync(event.target.result).then(async function(zip) {
                         let mapaVectoresAgrupados = {};
                         let capasFinalesUnificadas = [];
-                        let nombreTerritorio = "PROYECTO TERRITORIAL - AZUAY";
+                        
+                        // EXTRACTOR DINÁMICO DE NOMBRES DE PROVINCIA BASE
+                        let nombreTerritorio = "PROYECTO TERRITORIAL";
+                        let analizoNombre = file.name.toUpperCase();
+                        if(analizoNombre.includes("SANTA") || analizoNombre.includes("ELENA")) nombreTerritorio = "PROVINCIA DE SANTA ELENA";
+                        else if(analizoNombre.includes("AZUAY")) nombreTerritorio = "PROVINCIA DEL AZUAY";
+                        else nombreTerritorio = file.name.replace(".zip", "").toUpperCase();
 
                         for (let path in zip.files) {
                             const entry = zip.files[path];
@@ -245,6 +252,8 @@ document.addEventListener("DOMContentLoaded", () => {
                                     else if (rawUpper.includes("AREAS") || rawUpper.includes("PROTEGIDAS") || rawUpper.includes("BOSQUE")) temaDestino = "ÁREAS PROTEGIDAS";
                                     else if (rawUpper.includes("PARROQ")) temaDestino = "PARROQUIAS RURALES";
                                     else if (rawUpper.includes("POBLADOS") || rawUpper.includes("CENTROS")) temaDestino = "CENTROS POBLADOS";
+                                    else if (rawUpper.includes("CANTON")) temaDestino = "DIVISIÓN TERRITORIAL";
+                                    else temaDestino = filename.replace("json_", "").replace(".js", "").replace(/_/g, " ").toUpperCase();
 
                                     if (!mapaVectoresAgrupados[temaDestino]) {
                                         mapaVectoresAgrupados[temaDestino] = geojson;
@@ -283,7 +292,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         }
 
                         const proyectoKey = "proj_" + Date.now();
-                        proyectosCargados[proyectoKey] = {
+                        proyectosCargadosGlobal[proyectoKey] = {
                             nombre: nombreTerritorio,
                             capas: capasFinalesUnificadas
                         };
@@ -301,12 +310,13 @@ document.addEventListener("DOMContentLoaded", () => {
         // ACOPLE CARTOGRÁFICO ORIGINAL CON CONTROL DE SELECCIÓN BAJO DEMANDA
         // ==========================================================================
         function desplegarProyectoEnMapa(key) {
-            capasMapaActual.forEach(l => map.removeLayer(l));
+            // Limpieza controlada del lienzo antes de saltar a la otra provincia
+            capasMapaActual.forEach(l => map.removeLayer(l.layer));
             capasMapaActual = [];
             capasEstadoIA = {};
             themesListContainer.innerHTML = "";
 
-            const proyecto = proyectosCargados[key];
+            const proyecto = proyectosCargadosGlobal[key];
             let idx = 0;
 
             const vectores = proyecto.capas.filter(c => c.type === "vector");
@@ -314,13 +324,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
             let boundsCalculados = null;
 
-            // 1. Desplegar vectores (Tus cálculos originales intocados para evitar desfases)
+            // 1. Desplegar vectores (Cálculo original intocado para fijar el calce perfecto)
             vectores.forEach((capa) => {
                 idx++;
                 const hue = (idx * 155) % 360;
                 const layerColor = `hsl(${hue}, 90%, 55%)`;
                 
-                // MEJORA SOLICITADA: Solo la división territorial inicia encendida
+                // MEJORA REQUERIDA: Carga limpia. Solo la División Territorial inicia encendida
                 let debeActivarseAlInicio = (capa.name === "DIVISIÓN TERRITORIAL");
                 capasEstadoIA[capa.name] = debeActivarseAlInicio;
 
@@ -358,9 +368,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 inyectarTarjetaControl(capa.name, layerColor, mapLayer, idx, false, debeActivarseAlInicio);
             });
 
+            // Ajuste automático de Bounding Box según el territorio seleccionado
             const extensionFinalAmarre = boundsCalculados || L.latLngBounds([-3.38, -79.52], [-2.74, -78.42]);
 
-            // 2. Acoplar Rásters (Todos inician apagados de forma controlada bajo demanda)
+            // 2. Acoplar Rásters (Todos inician apagados de forma controlada cuidando la memoria)
             rasters.forEach((capa) => {
                 idx++;
                 capasEstadoIA[capa.name] = false;
@@ -424,7 +435,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             if (capasEstadoIA["DIVISIÓN TERRITORIAL"]) {
-                report += `• <b>Aprende a interpretar el mapa detallado territorial:</b> El polígono base establece la distribución político-administrativa formal del Azuay, fragmentando el territorio en sus 15 cantones matrices para cruces de variables de gestión local.<br>`;
+                report += `• <b>Aprende a interpretar el mapa detallado territorial:</b> El polígono base establece la distribución político-administrativa formal mapeada, fragmentando el territorio en sus cantones matrices para cruces de variables de gestión local.<br>`;
             }
             if (capasEstadoIA["SISTEMA HIDROGRÁFICO"]) {
                 report += `• <b>Aprende a interpretar el mapa detallado hidrográfico:</b> El trazado lineal expone las venas de escorrentía superficial de la provincia. Muestra cómo los cauces nacen de las partes altas y fluyen canalizados, actuando como fuentes de abastecimiento y zonas vulnerables a descargas hídricas urbanas.<br>`;
@@ -443,7 +454,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             
             if (capasEstadoIA["RÁSTER - MODELO DE ELEVACIÓN (MDT)"]) {
-                report += `• <b>Aprende a interpretar el mapa detallado de relieve (MDT):</b> La visualización demuestra una topografía altamente accidentada y compleja. Las mayores elevaciones (tonos cafés y marrones oscuros) superan los 4000 m s. n. m. en el núcleo central y en la cordillera occidental (zona del Cajas), actuando como fuentes de recarga hídrica vitales para la región. Por el contrario, las zonas bajas (tonos verdes) marcan la transición directa a la costa.<br>`;
+                report += `• <b>Aprende a interpretar el mapa detallado de relieve (MDT):</b> La visualización demuestra una topografía accidentada y compleja. Las mayores elevaciones (tonos cafés) actúan como fuentes de recarga hídrica vitales para la región, mientras que las zonas bajas marcan la transición directa al relieve plano.<br>`;
             }
             if (capasEstadoIA["RÁSTER - COMPOSTURA TÉRMICA"]) {
                 report += `• <b>Aprende a interpretar el mapa detallado microclimático:</b> El modelado demuestra claras variaciones de temperatura. Identifica zonas térmicas consolidadas sobre las planicies pavimentadas con baja cobertura vegetal, contrastando con la refrigeración climática de los bosques de altura.<br>`;
@@ -460,6 +471,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 <div style="font-size:0.75rem; color:#e2e8f0; line-height:1.45; text-transform:none; text-align:justify;">${report}</div>
             `;
         }
+
+        document.getElementById('btn-zoom-provincia').addEventListener('click', () => {
+            map.setView([-2.90, -78.96], 10);
+        });
 
         const tabButtons = document.querySelectorAll('.tab-btn');
         const tabContents = document.querySelectorAll('.tab-content');
