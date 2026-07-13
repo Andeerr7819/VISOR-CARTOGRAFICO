@@ -51,7 +51,6 @@
                 </div>
             </div>
             <div class="header-actions">
-                <!-- Modo Administrador oculto/activable -->
                 <button class="action-btn admin-only" id="btn-toggle-admin" title="Panel de Control General"><i class="fa-solid fa-lock-open"></i> Modo Admin</button>
                 <button class="action-btn" id="btn-zoom-provincia" title="Centrar Proyecto"><i class="fa-solid fa-crosshairs"></i> Enfoque Local</button>
             </div>
@@ -88,7 +87,7 @@
                     <button class="tab-btn" data-tab="themes-panel"><i class="fa-solid fa-layer-group"></i> Capas</button>
                 </div>
 
-                <!-- PESTAÑA 1: MONITOREO Y MONTAJE DE CIUDADES -->
+                <!-- PESTAÑA 1: REPOSITORIO Y MONTAJE DE PROVINCIAS -->
                 <div class="tab-content active" id="cities-panel">
                     <div class="layers-box">
                         <h3>Catálogo de Territorios</h3>
@@ -110,7 +109,8 @@
                             </ol>
                         </div>
 
-                        <div id="city-status-container" id="city-status-list"></div>
+                        <!-- ID ÚNICO REPARADO PARA ENLISTAR EL HISTORIAL DE PROVINCIAS -->
+                        <div id="city-status-list" style="margin-top: 10px; margin-bottom: 10px;"></div>
 
                         <!-- Panel de carga exclusivo para ti -->
                         <div id="admin-upload-zone" class="admin-zone hidden" style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 15px;">
